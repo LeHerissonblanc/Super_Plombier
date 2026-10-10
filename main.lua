@@ -10,7 +10,7 @@ local bg_music
 local player
 local world
 local accumulator      = 0
-local zoom             = 2                           -- cam zoom
+local zoom             = 2 -- cam zoom
 local camera           = { x = 0, y = 0, speed = 9 }
 
 -- functions
@@ -68,8 +68,9 @@ local function move(obj, dt)
         obj.velocity.y = 0
     end
 
+    -- friction
     obj.velocity.x = obj.velocity.x * world.friction
-    obj.velocity.y = obj.velocity.y * (world.friction / obj.weight)
+    obj.velocity.y = obj.velocity.y * world.friction -- no longer divided by weight
 
     -- snap tiny velocities to 0 so the object really stops
     if math.abs(obj.velocity.x) < 0.001 then obj.velocity.x = 0 end
@@ -96,7 +97,7 @@ function love.load()
 
     --Load objects
     world = {
-        gravity = 0.16, --per frame
+        gravity = 1, --per frame
         friction = 0.9,
         floorY = love.graphics.getHeight() * 0.75
     }
@@ -111,7 +112,7 @@ function love.load()
         jumpForce = 10,
         texture = texture,
         -- hitbox = {},
-        weight = 1.0
+        weight = 0.16 -- effective gravity = world.gravity * weight
     }
 
     -- player.hitbox.width = player.texture:getWidth() / 5
@@ -205,7 +206,7 @@ function love.draw()
 
     -- floor
     love.graphics.setColor(1, 1, 1)
-    love.graphics.setLineWidth(1 / zoom) -- ligne de 1 pixel écran
+    love.graphics.setLineWidth(1 / zoom) -- 1 screen pixel thick line
     love.graphics.line(player.x - sw, world.floorY, player.x + sw, world.floorY)
     love.graphics.setLineWidth(1)
 
