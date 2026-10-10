@@ -19,44 +19,62 @@ local function checkCollision(a, b)
         a.y + a.height > b.y
 end
 
---inputs
-function love.keypressed(key)
-    if showIntro and key == "space" then
-        showIntro = false
-        if intro_sound:isPlaying() then intro_sound:stop() end
-        bg_music:play()
-    end
-
-    if key == "escape" then
-        love.event.quit()
-    end
+-- vrai si les pieds du joueur touchent (ou dépassent) le sol
+local function isOnFloor(obj)
+    return obj.y + obj.texture:getHeight() >= world.floorY
 end
 
-local function playable(obj)
-    return obj == "player"
+--inputs
+function love.keypressed(key)
+    if key == "escape" then
+        love.event.quit()
+        return
+    end
+    if showIntro then
+        if key == "space" then
+            showIntro = false
+            if intro_sound:isPlaying() then intro_sound:stop() end
+            bg_music:play()
+        end
+    end
 end
 
 local function move(obj, dt)
-    if playable("player") then
+    if obj == player then
         if love.keyboard.isDown("d") then
             obj.velocity.x = obj.velocity.x + obj.speed * dt
         end
         if love.keyboard.isDown("q") then
             obj.velocity.x = obj.velocity.x - obj.speed * dt
         end
+        if love.keyboard.isDown("space") and isOnFloor(obj) then
+            player.velocity.y = -player.jumpForce
+        end
     end
 
-    obj.velocity.y = obj.velocity.y + (world.gravity * obj.weight)
+    -- gravity
+    if not isOnFloor(obj) then
+        obj.velocity.y = obj.velocity.y + (world.gravity * obj.weight)
+    end
 
-    obj.x = obj.x + obj.velocity.x * dt
-    obj.y = obj.y + obj.velocity.y * dt
+    obj.x = obj.x + obj.velocity.x
+    obj.y = obj.y + obj.velocity.y
 
-    obj.velocity.x = obj.velocity.x * world.friction
-    obj.velocity.y = obj.velocity.y * (world.friction / obj.weight)
+    -- replace obj
+    local h = obj.texture:getHeight()
+    if obj.y + h > world.floorY then
+        obj.y = world.floorY - h
+        obj.velocity.y = 0
+    end
+
+    obj.velocity.x = math.floor((obj.velocity.x * world.friction) * 1000) / 1000
+    obj.velocity.y = math.floor((obj.velocity.y * (world.friction / obj.weight)) * 1000) / 1000
 end
 
 -- main
 function love.load()
+    love.graphics.setDefaultFilter("nearest", "nearest")
+
     -- load assets
     font = love.graphics.newFont("fonts/JetBrainsMono-Regular.ttf", 12)
     love.graphics.setFont(font)
@@ -73,17 +91,20 @@ function love.load()
 
     --Load objects
     world = {
-        gravity = 1, --per frame
-        friction = 0.9
+        gravity = 1,                              --per frame
+        friction = 0.9,
+        floorY = love.graphics.getHeight() * 0.75
     }
 
     --player
+    local texture = love.graphics.newImage("assets/player.png")
     player = {
         x = love.graphics.getWidth() / 2,
-        y = love.graphics.getHeight() / 2,
+        y = world.floorY - texture:getHeight(), -- start on floor
         velocity = { x = 0, y = 0 },
-        speed = 200,
-        texture = love.graphics.newImage("assets/player.png"),
+        speed = 50,
+        jumpForce = 15,
+        texture = texture,
         hitbox = {},
         weight = 1.0
     }
@@ -93,17 +114,16 @@ function love.load()
     player.hitbox.offsetY = player.texture:getHeight() - player.hitbox.radius
 
     --boxes
-    Box.add("Window width = " .. love.graphics.getWidth() ..
-        "\nWindow height = " .. love.graphics.getHeight(), {
-            id = "window",
-            align = { "left", "top" },
-            padding = 10,
-            margin = 5,
-            cornerRadius = 10,
-            maxWidth = 300
-        })
+    Box.add("Window", {
+        id = "window",
+        align = { "left", "top" },
+        padding = 10,
+        margin = 5,
+        cornerRadius = 10,
+        maxWidth = 300
+    })
 
-    Box.add("Time: " .. os.date("%H:%M:%S"), {
+    Box.add("Clock", {
         id = "clock",
         align = { "right", "top" },
         padding = 10,
@@ -112,7 +132,7 @@ function love.load()
         maxWidth = 200
     })
 
-    Box.add("x: " .. math.floor(player.x) .. "\ny: " .. math.floor(player.y), {
+    Box.add("Data", {
         id = "coord",
         align = { "left", "bottom" },
         padding = 10,
@@ -130,10 +150,15 @@ function love.update(dt)
         Box.update("clock", "Time: " .. os.date("%H:%M:%S"))
     end
 
-    Box.update("window", "Window width = " .. love.graphics.getWidth() ..
+    Box.update("window",
+        "Window width = " .. love.graphics.getWidth() ..
         "\nWindow height = " .. love.graphics.getHeight())
 
-    Box.update("coord", "x: " .. math.floor(player.x) .. "\ny: " .. math.floor(player.y))
+    Box.update("coord",
+        "x: " .. math.floor(player.x) ..
+        "\ny: " .. math.floor(player.y) ..
+        "\nvelocity x: " .. string.format("%.1f", player.velocity.x) ..
+        "\nvelocity y: " .. string.format("%.1f", player.velocity.y))
 
     if not showIntro then
         move(player, dt)
@@ -155,7 +180,12 @@ function love.draw()
     love.graphics.setFont(font)
     Box.draw()
 
+    -- floor
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.line(0, world.floorY, love.graphics.getWidth(), world.floorY)
+
     -- player
+    love.graphics.setColor(1, 1, 1)
     love.graphics.draw(player.texture, player.x, player.y)
 
     --player's hitbox
