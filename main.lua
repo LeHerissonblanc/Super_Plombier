@@ -10,16 +10,17 @@ local bg_music
 local player
 local world
 local accumulator      = 0
+local zoom             = 2                           -- cam zoom
+local camera           = { x = 0, y = 0, speed = 9 }
 
 -- functions
 local function checkCollision(a, b)
-    return a.x < b.x + b.width and
-        a.x + a.width > b.x and
+    return a.x < b.x + b.hitbox.width and
+        a.x + a.hitbox.width > b.x and
         a.y < b.y + b.height and
         a.y + a.height > b.y
 end
 
--- vrai si les pieds du joueur touchent (ou dépassent) le sol
 local function isOnFloor(obj)
     return obj.y + obj.texture:getHeight() >= world.floorY
 end
@@ -67,8 +68,12 @@ local function move(obj, dt)
         obj.velocity.y = 0
     end
 
-    obj.velocity.x = math.floor((obj.velocity.x * world.friction) * 1000) / 1000
-    obj.velocity.y = math.floor((obj.velocity.y * (world.friction / obj.weight)) * 1000) / 1000
+    obj.velocity.x = obj.velocity.x * world.friction
+    obj.velocity.y = obj.velocity.y * (world.friction / obj.weight)
+
+    -- snap tiny velocities to 0 so the object really stops
+    if math.abs(obj.velocity.x) < 0.001 then obj.velocity.x = 0 end
+    if math.abs(obj.velocity.y) < 0.001 then obj.velocity.y = 0 end
 end
 
 -- main
@@ -91,7 +96,7 @@ function love.load()
 
     --Load objects
     world = {
-        gravity = 1,                              --per frame
+        gravity = 0.16, --per frame
         friction = 0.9,
         floorY = love.graphics.getHeight() * 0.75
     }
@@ -103,15 +108,18 @@ function love.load()
         y = world.floorY - texture:getHeight(), -- start on floor
         velocity = { x = 0, y = 0 },
         speed = 50,
-        jumpForce = 15,
+        jumpForce = 10,
         texture = texture,
-        hitbox = {},
+        -- hitbox = {},
         weight = 1.0
     }
 
-    player.hitbox.radius = player.texture:getWidth() / 5
-    player.hitbox.offsetX = player.texture:getWidth() / 2
-    player.hitbox.offsetY = player.texture:getHeight() - player.hitbox.radius
+    -- player.hitbox.width = player.texture:getWidth() / 5
+    -- player.hitbox.offsetX = player.texture:getWidth() / 2
+    -- player.hitbox.offsetY = player.texture:getHeight() - player.hitbox.width
+
+    camera.x = player.x + player.texture:getWidth() / 2
+    camera.y = player.y + player.texture:getHeight() / 2
 
     --boxes
     Box.add("Window", {
@@ -162,6 +170,13 @@ function love.update(dt)
 
     if not showIntro then
         move(player, dt)
+
+        -- Smooth cam
+        local targetX = player.x + player.texture:getWidth() / 2
+        local targetY = player.y + player.texture:getHeight() / 2
+        local t = 1 - math.exp(-camera.speed * dt)
+        camera.x = camera.x + (targetX - camera.x) * t
+        camera.y = camera.y + (targetY - camera.y) * t
     end
 end
 
@@ -177,23 +192,40 @@ function love.draw()
         return
     end
 
-    love.graphics.setFont(font)
-    Box.draw()
+    -- WORLD
+    local sw, sh = love.graphics.getWidth(), love.graphics.getHeight()
+
+    local cx = math.floor(camera.x * zoom + 0.5) / zoom
+    local cy = math.floor(camera.y * zoom + 0.5) / zoom
+
+    love.graphics.push()
+    love.graphics.translate(sw / 2, sh / 2)
+    love.graphics.scale(zoom)
+    love.graphics.translate(-cx, -cy)
 
     -- floor
     love.graphics.setColor(1, 1, 1)
-    love.graphics.line(0, world.floorY, love.graphics.getWidth(), world.floorY)
+    love.graphics.setLineWidth(1 / zoom) -- ligne de 1 pixel écran
+    love.graphics.line(player.x - sw, world.floorY, player.x + sw, world.floorY)
+    love.graphics.setLineWidth(1)
 
     -- player
     love.graphics.setColor(1, 1, 1)
     love.graphics.draw(player.texture, player.x, player.y)
 
-    --player's hitbox
-    love.graphics.setColor(1, 0, 0)
-    love.graphics.circle(
-        "line",
-        player.x + player.hitbox.offsetX,
-        player.y + player.hitbox.offsetY,
-        player.hitbox.radius
-    )
+    -- --player's hitbox
+    -- love.graphics.setColor(1, 0, 0)
+    -- love.graphics.circle(
+    --     "line",
+    --     player.x + player.hitbox.offsetX,
+    --     player.y + player.hitbox.offsetY,
+    --     player.hitbox.width
+    -- )
+
+    love.graphics.pop()
+
+    -- UI
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.setFont(font)
+    Box.draw()
 end
